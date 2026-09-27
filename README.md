@@ -18,6 +18,9 @@
   输入指纹与结果指纹（规范化 JSON 的 SHA-256）。复算严格按固化版本取数。
 - **授权粒度**：机构仅能访问被授权的 `项目 × 指标类别 × 权限`；
   主管单位（`X-Role: supervisor`）拥有全部范围。
+- **跨机构对账不静默取值**：同一业务编号两边金额对不上时逐项标出差异，
+  每项始终携带双方金额与系统生成的说明；业务人员可补充说明并逐项确认
+  （确认落库留痕），全部确认后方可关闭对账，系统绝不自动采用任一方数值。
 - **幂等与断点恢复**：计算任务以幂等键去重；计算分
   `snapshot → convert → aggregate → persist` 四步，每步落检查点，
   失败/崩溃后再次执行从断点续跑，重复执行收敛为同一份报告。
@@ -60,6 +63,11 @@
 | `POST /reports/{report_id}/review` | 复核通过/驳回（复核人不得是原计算人） |
 | `POST /reports/{report_id}/exports` | 导出复核通过的报告（含换算依据与证据清单） |
 | `POST /grants` | 主管单位配置机构授权 |
+| `POST /reconciliations` | 发起跨机构对账，逐项返回差异（双方金额+系统说明） |
+| `GET  /reconciliations/{run_id}` | 对账详情（差异项与确认进度） |
+| `POST /reconciliations/{run_id}/items/{business_no}/note` | 差异项补充说明 |
+| `POST /reconciliations/{run_id}/items/{business_no}/confirm` | 逐项确认差异（可附说明） |
+| `POST /reconciliations/{run_id}/close` | 全部差异确认后关闭对账 |
 
 错误统一为 `{ "error": <码>, "message": ..., "detail": ... }`，
 HTTP 状态：403 未授权、404 不存在、409 冲突、422 校验/缺失数据。

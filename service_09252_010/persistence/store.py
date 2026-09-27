@@ -12,6 +12,10 @@ from ..domain.models import (
     Indicator,
     IndicatorVersion,
     Observation,
+    ReconciliationItem,
+    ReconciliationItemStatus,
+    ReconciliationRun,
+    ReconciliationStatus,
     Report,
     ReportStatus,
     RuleStatus,
@@ -462,3 +466,97 @@ class Store:
             (report_id,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+    # ---- 跨机构对账 ----
+    def add_reconciliation_run(self, run: ReconciliationRun) -> None:
+        self.conn.execute(
+            "INSERT INTO reconciliation_runs (id, project_id, left_institution,"
+            " right_institution, period, matched_count, status, created_by,"
+            " created_at, closed_by, closed_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (run.id, run.project_id, run.left_institution,
+             run.right_institution, run.period, run.matched_count,
+             run.status.value, run.created_by, run.created_at,
+             run.closed_by, run.closed_at),
+        )
+
+    def get_reconciliation_run(self, run_id: str) -> ReconciliationRun | None:
+        row = self.conn.execute(
+            "SELECT * FROM reconciliation_runs WHERE id = ?", (run_id,)
+        ).fetchone()
+        return self._to_reconciliation_run(row) if row else None
+
+    def set_reconciliation_run_closed(self, run_id: str, closed_by: str,
+                                      closed_at: str) -> None:
+        self.conn.execute(
+            "UPDATE reconciliation_runs SET status = ?, closed_by = ?,"
+            " closed_at = ? WHERE id = ?",
+            (ReconciliationStatus.CLOSED.value, closed_by, closed_at, run_id),
+        )
+
+    @staticmethod
+    def _to_reconciliation_run(row: sqlite3.Row) -> ReconciliationRun:
+        return ReconciliationRun(
+            id=row["id"],
+            project_id=row["project_id"],
+            left_institution=row["left_institution"],
+            right_institution=row["right_institution"],
+            period=row["period"],
+            matched_count=row["matched_count"],
+            status=ReconciliationStatus(row["status"]),
+            created_by=row["created_by"],
+            created_at=row["created_at"],
+            closed_by=row["closed_by"],
+            closed_at=row["closed_at"],
+        )
+
+    def add_reconciliation_item(self, item: ReconciliationItem) -> None:
+        self.conn.execute(
+            "INSERT INTO reconciliation_items (id, run_id, business_no,"
+            " left_amount, right_amount, kind, description, note, status,"
+            " confirmed_by, confirmed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (item.id, item.run_id, item.business_no, item.left_amount,
+             item.right_amount, item.kind, item.description, item.note,
+             item.status.value, item.confirmed_by, item.confirmed_at),
+        )
+
+    def get_reconciliation_item(self, run_id: str,
+                                business_no: str) -> ReconciliationItem | None:
+        row = self.conn.execute(
+            "SELECT * FROM reconciliation_items WHERE run_id = ? AND business_no = ?",
+            (run_id, business_no),
+        ).fetchone()
+        return self._to_reconciliation_item(row) if row else None
+
+    def list_reconciliation_items(self, run_id: str) -> list[ReconciliationItem]:
+        rows = self.conn.execute(
+            "SELECT * FROM reconciliation_items WHERE run_id = ?"
+            " ORDER BY business_no",
+            (run_id,),
+        ).fetchall()
+        return [self._to_reconciliation_item(r) for r in rows]
+
+    def update_reconciliation_item(self, item: ReconciliationItem) -> None:
+        """更新差异项的补充说明与确认留痕；双方金额与系统说明不可改写。"""
+        self.conn.execute(
+            "UPDATE reconciliation_items SET note = ?, status = ?,"
+            " confirmed_by = ?, confirmed_at = ? WHERE id = ?",
+            (item.note, item.status.value, item.confirmed_by,
+             item.confirmed_at, item.id),
+        )
+
+    @staticmethod
+    def _to_reconciliation_item(row: sqlite3.Row) -> ReconciliationItem:
+        return ReconciliationItem(
+            id=row["id"],
+            run_id=row["run_id"],
+            business_no=row["business_no"],
+            left_amount=row["left_amount"],
+            right_amount=row["right_amount"],
+            kind=row["kind"],
+            description=row["description"],
+            note=row["note"],
+            status=ReconciliationItemStatus(row["status"]),
+            confirmed_by=row["confirmed_by"],
+            confirmed_at=row["confirmed_at"],
+        )

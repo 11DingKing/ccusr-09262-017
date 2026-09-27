@@ -77,6 +77,14 @@ class Application:
             ("POST", ("reports", "{report_id}", "exports"), self._export_report),
             ("GET", ("reports", "{report_id}"), self._get_report),
             ("POST", ("grants",), self._create_grant),
+            ("POST", ("reconciliations",), self._create_reconciliation),
+            ("GET", ("reconciliations", "{run_id}"), self._get_reconciliation),
+            ("POST", ("reconciliations", "{run_id}", "items", "{business_no}",
+                      "note"), self._reconciliation_note),
+            ("POST", ("reconciliations", "{run_id}", "items", "{business_no}",
+                      "confirm"), self._reconciliation_confirm),
+            ("POST", ("reconciliations", "{run_id}", "close"),
+             self._reconciliation_close),
         ]
 
     def __call__(self, env: dict, start_response) -> list[bytes]:
@@ -290,6 +298,35 @@ class Application:
                       body.get("category", "*"), permission),
             )
         return 201, {"granted": True}
+
+    # ---- 跨机构对账 ----
+    def _create_reconciliation(self, p: Principal, body: dict, ctx: Context):
+        result = ctx.container.reconciliations.create_run(
+            p, project_id=body["project_id"],
+            left_institution=body["left_institution"],
+            right_institution=body["right_institution"],
+            period=body["period"],
+            left_items=body.get("left_items", []),
+            right_items=body.get("right_items", []),
+        )
+        return 201, result
+
+    def _get_reconciliation(self, p: Principal, body: dict, ctx: Context):
+        return 200, ctx.container.reconciliations.get_run(
+            p, ctx.match["run_id"])
+
+    def _reconciliation_note(self, p: Principal, body: dict, ctx: Context):
+        return 200, ctx.container.reconciliations.add_note(
+            p, ctx.match["run_id"], ctx.match["business_no"],
+            note=body.get("note", ""))
+
+    def _reconciliation_confirm(self, p: Principal, body: dict, ctx: Context):
+        return 200, ctx.container.reconciliations.confirm_item(
+            p, ctx.match["run_id"], ctx.match["business_no"],
+            note=body.get("note"))
+
+    def _reconciliation_close(self, p: Principal, body: dict, ctx: Context):
+        return 200, ctx.container.reconciliations.close(p, ctx.match["run_id"])
 
 
 def _not_found(message: str):

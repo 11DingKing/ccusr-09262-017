@@ -7,7 +7,7 @@ from ..domain.errors import PermissionDeniedError
 from ..domain.models import Grant, Principal
 from ..persistence.store import Store
 
-PERMISSIONS = ("import", "view", "calculate", "review", "export")
+PERMISSIONS = ("import", "view", "calculate", "review", "export", "reconcile")
 
 
 class AccessPolicy:

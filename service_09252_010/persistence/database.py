@@ -145,6 +145,33 @@ CREATE TABLE IF NOT EXISTS exports (
     exported_at TEXT NOT NULL,
     digest TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS reconciliation_runs (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    left_institution TEXT NOT NULL,
+    right_institution TEXT NOT NULL,
+    period TEXT NOT NULL,
+    matched_count INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    closed_by TEXT,
+    closed_at TEXT
+);
+CREATE TABLE IF NOT EXISTS reconciliation_items (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES reconciliation_runs(id),
+    business_no TEXT NOT NULL,
+    left_amount REAL,
+    right_amount REAL,
+    kind TEXT NOT NULL,
+    description TEXT NOT NULL,
+    note TEXT,
+    status TEXT NOT NULL,
+    confirmed_by TEXT,
+    confirmed_at TEXT,
+    UNIQUE (run_id, business_no)
+);
 """
 
 

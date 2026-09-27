@@ -41,6 +41,20 @@ class ReportStatus(str, Enum):
     REJECTED = "rejected"  # 复核驳回（终态）
 
 
+class ReconciliationStatus(str, Enum):
+    """跨机构对账批次的生命周期。"""
+
+    OPEN = "open"  # 对账中：差异待逐项确认
+    CLOSED = "closed"  # 全部差异确认完毕（终态）
+
+
+class ReconciliationItemStatus(str, Enum):
+    """单条差异项的确认状态。"""
+
+    PENDING = "pending"  # 待确认
+    CONFIRMED = "confirmed"  # 已确认（终态）
+
+
 # 计算任务的断点步骤，顺序即执行顺序。
 CALCULATION_STEPS: tuple[str, ...] = ("snapshot", "convert", "aggregate", "persist")
 
@@ -175,6 +189,40 @@ class Report:
     created_by: str
     created_at: str
     task_id: str
+
+
+@dataclass(frozen=True)
+class ReconciliationRun:
+    """一次跨机构对账：两家机构同一期间的账目逐项比对。"""
+
+    id: str
+    project_id: str
+    left_institution: str
+    right_institution: str
+    period: str
+    matched_count: int  # 双方金额一致、无需确认的笔数
+    status: ReconciliationStatus
+    created_by: str
+    created_at: str
+    closed_by: str | None
+    closed_at: str | None
+
+
+@dataclass(frozen=True)
+class ReconciliationItem:
+    """逐项差异：始终携带双方金额与系统生成说明，确认动作留痕。"""
+
+    id: str
+    run_id: str
+    business_no: str
+    left_amount: float | None  # None 表示左方无此笔
+    right_amount: float | None  # None 表示右方无此笔
+    kind: str  # amount_mismatch / left_only / right_only
+    description: str  # 系统（Python）生成的差异说明
+    note: str | None  # 业务人员补充说明
+    status: ReconciliationItemStatus
+    confirmed_by: str | None
+    confirmed_at: str | None
 
 
 @dataclass(frozen=True)
