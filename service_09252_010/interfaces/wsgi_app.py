@@ -77,6 +77,10 @@ class Application:
             ("POST", ("reports", "{report_id}", "exports"), self._export_report),
             ("GET", ("reports", "{report_id}"), self._get_report),
             ("POST", ("grants",), self._create_grant),
+            ("POST", ("reconciliations",), self._create_reconciliation),
+            ("GET", ("reconciliations", "{run_id}"), self._get_reconciliation),
+            ("POST", ("reconciliations", "{run_id}", "lines",
+                      "{biz_no}", "confirm"), self._confirm_recon_line),
         ]
 
     def __call__(self, env: dict, start_response) -> list[bytes]:
@@ -290,6 +294,38 @@ class Application:
                       body.get("category", "*"), permission),
             )
         return 201, {"granted": True}
+
+    # ---- 跨机构对账 ----
+    def _create_reconciliation(self, p: Principal, body: dict, ctx: Context):
+        from ..domain.errors import ValidationError
+
+        try:
+            result = ctx.container.reconciliation.create(
+                p,
+                left_institution=body["left_institution"],
+                right_institution=body["right_institution"],
+                left_entries=body["left_entries"],
+                right_entries=body["right_entries"],
+            )
+        except KeyError as exc:
+            raise ValidationError(f"缺少必填字段: {exc.args[0]}") from None
+        return 201, result
+
+    def _get_reconciliation(self, p: Principal, body: dict, ctx: Context):
+        only_discrepancies = (ctx.query("discrepancies_only") or "").lower() in (
+            "1", "true", "yes",
+        )
+        return 200, ctx.container.reconciliation.get_run(
+            p, ctx.match["run_id"],
+            only_discrepancies=only_discrepancies,
+        )
+
+    def _confirm_recon_line(self, p: Principal, body: dict, ctx: Context):
+        return 200, ctx.container.reconciliation.confirm_line(
+            p, ctx.match["run_id"], ctx.match["biz_no"],
+            note=body.get("note"),
+            status=body.get("status", "confirmed"),
+        )
 
 
 def _not_found(message: str):

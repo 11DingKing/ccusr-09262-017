@@ -12,6 +12,10 @@ from ..domain.models import (
     Indicator,
     IndicatorVersion,
     Observation,
+    ReconciliationLine,
+    ReconciliationRun,
+    ReconConfirmStatus,
+    ReconItemStatus,
     Report,
     ReportStatus,
     RuleStatus,
@@ -462,3 +466,97 @@ class Store:
             (report_id,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+    # ---- 跨机构对账 ----
+    def add_recon_run(self, run: ReconciliationRun) -> None:
+        self.conn.execute(
+            "INSERT INTO reconciliation_runs (id, left_institution,"
+            " right_institution, created_by, created_at, total, matched,"
+            " discrepancies) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (run.id, run.left_institution, run.right_institution,
+             run.created_by, run.created_at, run.total, run.matched,
+             run.discrepancies),
+        )
+
+    def add_recon_lines(self, lines: list[ReconciliationLine]) -> None:
+        self.conn.executemany(
+            "INSERT INTO reconciliation_lines (id, run_id, biz_no, left_amount,"
+            " right_amount, diff, status, description, confirm_status, note,"
+            " confirmed_by, confirmed_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [(line.id, line.run_id, line.biz_no, line.left_amount,
+              line.right_amount, line.diff, line.status.value,
+              line.description,
+              line.confirm_status.value if line.confirm_status else None,
+              line.note, line.confirmed_by, line.confirmed_at)
+             for line in lines],
+        )
+
+    def get_recon_run(self, run_id: str) -> ReconciliationRun | None:
+        row = self.conn.execute(
+            "SELECT * FROM reconciliation_runs WHERE id = ?", (run_id,)
+        ).fetchone()
+        return self._to_recon_run(row) if row else None
+
+    def list_recon_lines(self, run_id: str,
+                         only_discrepancies: bool = False) -> list[ReconciliationLine]:
+        if only_discrepancies:
+            rows = self.conn.execute(
+                "SELECT * FROM reconciliation_lines WHERE run_id = ?"
+                " AND status != ? ORDER BY biz_no",
+                (run_id, ReconItemStatus.MATCH.value),
+            ).fetchall()
+        else:
+            rows = self.conn.execute(
+                "SELECT * FROM reconciliation_lines WHERE run_id = ? ORDER BY biz_no",
+                (run_id,),
+            ).fetchall()
+        return [self._to_recon_line(r) for r in rows]
+
+    def get_recon_line(self, run_id: str, biz_no: str) -> ReconciliationLine | None:
+        row = self.conn.execute(
+            "SELECT * FROM reconciliation_lines WHERE run_id = ? AND biz_no = ?",
+            (run_id, biz_no),
+        ).fetchone()
+        return self._to_recon_line(row) if row else None
+
+    def update_recon_line_confirmation(self, line_id: str, *,
+                                       confirm_status: ReconConfirmStatus,
+                                       note: str | None, confirmed_by: str,
+                                       confirmed_at: str) -> None:
+        self.conn.execute(
+            "UPDATE reconciliation_lines SET confirm_status = ?, note = ?,"
+            " confirmed_by = ?, confirmed_at = ? WHERE id = ?",
+            (confirm_status.value, note, confirmed_by, confirmed_at, line_id),
+        )
+
+    @staticmethod
+    def _to_recon_run(row: sqlite3.Row) -> ReconciliationRun:
+        return ReconciliationRun(
+            id=row["id"],
+            left_institution=row["left_institution"],
+            right_institution=row["right_institution"],
+            created_by=row["created_by"],
+            created_at=row["created_at"],
+            total=row["total"],
+            matched=row["matched"],
+            discrepancies=row["discrepancies"],
+        )
+
+    @staticmethod
+    def _to_recon_line(row: sqlite3.Row) -> ReconciliationLine:
+        raw_status = row["confirm_status"]
+        return ReconciliationLine(
+            id=row["id"],
+            run_id=row["run_id"],
+            biz_no=row["biz_no"],
+            left_amount=row["left_amount"],
+            right_amount=row["right_amount"],
+            diff=row["diff"],
+            status=ReconItemStatus(row["status"]),
+            description=row["description"],
+            confirm_status=ReconConfirmStatus(raw_status) if raw_status else None,
+            note=row["note"],
+            confirmed_by=row["confirmed_by"],
+            confirmed_at=row["confirmed_at"],
+        )

@@ -197,3 +197,56 @@ class Principal:
     @property
     def is_supervisor(self) -> bool:
         return self.role == "supervisor"
+
+
+class ReconItemStatus(str, Enum):
+    """逐项对账状态：一致 / 金额不一致 / 单侧缺记录。"""
+
+    MATCH = "match"
+    AMOUNT_MISMATCH = "amount_mismatch"
+    MISSING_LEFT = "missing_left"
+    MISSING_RIGHT = "missing_right"
+
+
+class ReconConfirmStatus(str, Enum):
+    """差异项的确认生命周期（仅差异项需要逐项确认）。"""
+
+    OPEN = "open"  # 待确认
+    CONFIRMED = "confirmed"  # 已确认
+    RESOLVED = "resolved"  # 已处理
+
+
+@dataclass(frozen=True)
+class ReconciliationRun:
+    """一次跨机构对账：固化双方机构与双方原始账目，差异逐项落库。"""
+
+    id: str
+    left_institution: str
+    right_institution: str
+    created_by: str
+    created_at: str
+    total: int
+    matched: int
+    discrepancies: int
+
+
+@dataclass(frozen=True)
+class ReconciliationLine:
+    """一个业务编号的对账行。
+
+    差异行必须同时携带双方金额（缺侧为 None），任何流程都不得只存一侧；
+    description 由领域层 Python 生成并固化，note 为业务人员补充说明。
+    """
+
+    id: str
+    run_id: str
+    biz_no: str
+    left_amount: float | None
+    right_amount: float | None
+    diff: float | None
+    status: ReconItemStatus
+    description: str
+    confirm_status: ReconConfirmStatus | None  # 仅差异项需要确认
+    note: str | None
+    confirmed_by: str | None
+    confirmed_at: str | None

@@ -145,6 +145,33 @@ CREATE TABLE IF NOT EXISTS exports (
     exported_at TEXT NOT NULL,
     digest TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS reconciliation_runs (
+    id TEXT PRIMARY KEY,
+    left_institution TEXT NOT NULL,
+    right_institution TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    total INTEGER NOT NULL,
+    matched INTEGER NOT NULL,
+    discrepancies INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS reconciliation_lines (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES reconciliation_runs(id),
+    biz_no TEXT NOT NULL,
+    left_amount REAL,
+    right_amount REAL,
+    diff REAL,
+    status TEXT NOT NULL,
+    description TEXT NOT NULL,
+    confirm_status TEXT,
+    note TEXT,
+    confirmed_by TEXT,
+    confirmed_at TEXT,
+    UNIQUE (run_id, biz_no)
+);
+CREATE INDEX IF NOT EXISTS idx_recon_lines_run
+    ON reconciliation_lines (run_id, status, confirm_status);
 """
 
 

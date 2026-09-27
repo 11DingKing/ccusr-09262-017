@@ -21,6 +21,10 @@
 - **幂等与断点恢复**：计算任务以幂等键去重；计算分
   `snapshot → convert → aggregate → persist` 四步，每步落检查点，
   失败/崩溃后再次执行从断点续跑，重复执行收敛为同一份报告。
+- **跨机构数据对账不取单边账**：同一业务编号两边金额不一致（或仅一侧有记录）
+  时逐项标为差异，差异行**同时固化双方金额**与差额，缺侧显式为 `null`；
+  `description` 由 Python 领域逻辑生成，接口不接受外部传入；差异逐项落
+  SQLite 并支持业务人员逐项确认与补充说明，任何流程都不静默取任一方金额。
 - **运行数据不进源码目录**：数据库路径通过 `APP_DB_PATH` 或 `--db` 注入，
   缺省使用系统临时目录。
 
@@ -60,6 +64,9 @@
 | `POST /reports/{report_id}/review` | 复核通过/驳回（复核人不得是原计算人） |
 | `POST /reports/{report_id}/exports` | 导出复核通过的报告（含换算依据与证据清单） |
 | `POST /grants` | 主管单位配置机构授权 |
+| `POST /reconciliations` | 跨机构数据对账：逐项标出差异（双方金额并列、Python 生成说明） |
+| `GET  /reconciliations/{run_id}` | 对账详情（`?discrepancies_only=true` 仅看差异） |
+| `POST /reconciliations/{run_id}/lines/{biz_no}/confirm` | 逐项确认差异并补充说明 |
 
 错误统一为 `{ "error": <码>, "message": ..., "detail": ... }`，
 HTTP 状态：403 未授权、404 不存在、409 冲突、422 校验/缺失数据。
@@ -83,7 +90,8 @@ python3 -m unittest discover -s tests -v
 覆盖场景：缺失值三种策略（skip/zero/fail）、跨年度观察期窗口、
 迟到数据新版本与差异、撤回记录、并发会签恰好生效一次、
 幂等提交与并发收敛、断点恢复与失败标记、指标更新不可改写旧报告、
-规则回滚仅影响新报告、授权粒度过滤、复核独立性与导出留痕、HTTP 全链路。
+规则回滚仅影响新报告、授权粒度过滤、复核独立性与导出留痕、HTTP 全链路、
+跨机构对账双方金额并列与逐项确认（含空差异对账）。
 
 ## 编译检查
 
